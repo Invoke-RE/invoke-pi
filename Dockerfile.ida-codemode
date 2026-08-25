@@ -1,10 +1,10 @@
-# Docker image for Pi + Hex-Rays ida-codemode MCP support.
+# Docker image for Pi + Hex-Rays ida-nexus MCP support.
 #
 # Notes:
 # - IDA is proprietary and is NOT installed by this Dockerfile. Mount or copy a
 #   licensed IDA 9.4+ installation into the container, commonly at /opt/ida.
-# - The image installs uv because ida-codemode's Pi extension starts its MCP
-#   server with: uv run --with=ida-hcli ... ida-codemode mcp --agent=pi
+# - The image installs uv because ida-nexus' Pi extension starts its MCP
+#   server with: uv run --with=ida-hcli ... ida-nexus mcp --agent=pi
 # - GUI discovery only works for IDA GUI instances reachable from the same
 #   filesystem/user state. For most Docker workflows, use headless idalib by
 #   asking Pi to open a local sample/IDB mounted into /workspace.
@@ -38,18 +38,18 @@ RUN apt-get update \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
   && uv --version
 
-# Install Pi and the MCP adapter/ida-codemode extension.
+# Install Pi and the MCP adapter/ida-nexus extension.
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent \
   && pi install npm:pi-mcp-adapter \
   && pi install npm:pi-web-access \
-  && pi install git:github.com/HexRaysSA/ida-codemode \
+  && pi install git:github.com/HexRaysSA/ida-nexus \
   && pi update --extensions
 
 # Pre-fetch Python packages used by the MCP server. This makes startup faster
-# and verifies that ida-codemode + ida-hcli can resolve in this image. It does
+# and verifies that ida-nexus + ida-hcli can resolve in this image. It does
 # not require a licensed IDA installation until a database is opened.
-RUN cd /root/.pi/agent/git/github.com/HexRaysSA/ida-codemode \
-  && uv run --with=ida-hcli --project . ida-codemode --help >/dev/null
+RUN cd /root/.pi/agent/git/github.com/HexRaysSA/ida-nexus \
+  && uv run --with=ida-hcli --project . ida-nexus --help >/dev/null
 
 # Copy pre-baked extensions into a backup template directory
 RUN cp -a /root/.pi /root/.pi-template
