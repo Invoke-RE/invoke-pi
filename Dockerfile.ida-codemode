@@ -1,0 +1,78 @@
+# Docker image for Pi + Hex-Rays ida-codemode MCP support.
+#
+# Notes:
+# - IDA is proprietary and is NOT installed by this Dockerfile. Mount or copy a
+#   licensed IDA 9.4+ installation into the container, commonly at /opt/ida.
+# - The image installs uv because ida-codemode's Pi extension starts its MCP
+#   server with: uv run --with=ida-hcli ... ida-codemode mcp --agent=pi
+# - GUI discovery only works for IDA GUI instances reachable from the same
+#   filesystem/user state. For most Docker workflows, use headless idalib by
+#   asking Pi to open a local sample/IDB mounted into /workspace.
+
+FROM node:24-bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    UV_INSTALL_DIR=/usr/local/bin \
+    UV_CACHE_DIR=/root/.cache/uv \
+    IDA_PATH=/opt/ida \
+    IDADIR=/opt/ida \
+    IDAUSR=/root/.idapro \
+    PATH="/opt/ida:/root/.local/bin:/usr/local/bin:${PATH}"
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    git \
+    openssh-client \
+    python3 \
+    python3-venv \
+    python3-pip \
+    ripgrep \
+    xz-utils \
+    unzip \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install uv/uvx.
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+  && uv --version
+
+# Install Pi and the MCP adapter/ida-codemode extension.
+RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent \
+  && pi install npm:pi-mcp-adapter \
+  && pi install npm:pi-web-access \
+  && pi install git:github.com/HexRaysSA/ida-codemode \
+  && pi update --extensions
+
+# Pre-fetch Python packages used by the MCP server. This makes startup faster
+# and verifies that ida-codemode + ida-hcli can resolve in this image. It does
+# not require a licensed IDA installation until a database is opened.
+RUN cd /root/.pi/agent/git/github.com/HexRaysSA/ida-codemode \
+  && uv run --with=ida-hcli --project . ida-codemode --help >/dev/null
+
+# Copy pre-baked extensions into a backup template directory
+RUN cp -a /root/.pi /root/.pi-template
+
+# Create entrypoint script inline to sync template data without clobbering host mount files
+RUN cat << 'EOF' > /usr/local/bin/docker-entrypoint.sh
+#!/usr/bin/env bash
+set -e
+
+if [ -d "/root/.pi-template" ]; then
+  cp -rn /root/.pi-template/. /root/.pi/ 2>/dev/null || true
+fi
+
+exec "$@"
+EOF
+
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+RUN mkdir -p /workspace /opt/ida /root/.idapro
+ENV IDADIR=/opt/ida
+
+WORKDIR /workspace
+VOLUME ["/workspace", "/opt/ida", "/root/.idapro"]
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["pi"]
