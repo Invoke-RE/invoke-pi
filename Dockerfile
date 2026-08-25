@@ -8,5 +8,22 @@ RUN pi install npm:pi-mcp-adapter
 RUN pi install npm:pi-web-access
 RUN pi update --extensions
 
-WORKDIR /workspace
-ENTRYPOINT ["pi"]
+# Copy pre-baked extensions into a backup template directory
+RUN cp -a /root/.pi /root/.pi-template
+
+# Create entrypoint script inline to sync template data without clobbering host mount files
+RUN cat << 'EOF' > /usr/local/bin/docker-entrypoint.sh
+#!/usr/bin/env bash
+set -e
+
+if [ -d "/root/.pi-template" ]; then
+  cp -rn /root/.pi-template/. /root/.pi/ 2>/dev/null || true
+fi
+
+exec "$@"
+EOF
+
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["pi"]
